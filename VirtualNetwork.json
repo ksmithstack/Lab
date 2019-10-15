@@ -1,0 +1,136 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "pVNET": {
+      "type": "object"
+    },
+    "pPrivateDMZ": {
+      "type": "object"
+    },
+    "pPublicDMZ": {
+      "type": "object"
+    },
+    "pTag": {
+      "type": "object"
+    }
+  },
+  "variables": {},
+  "resources": [
+    {
+      "name": "[parameters('pVNET').Name]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2018-08-01",
+      "location": "[resourceGroup().location]",
+      "tags": "[if(empty(parameters('pTag')), json('null'), parameters('pTag'))]",
+      "dependsOn": [],
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('pVNET').IPRange]"
+          ]
+        },
+        "copy": [
+          {
+            "name": "subnets",
+            "count": "[length(parameters('pVNET').Subnet)]",
+            "input": {
+              "name": "[parameters('pVNET').Subnet[copyIndex('subnets')].Name]",
+              "properties": {
+                "addressPrefix": "[parameters('pVNET').Subnet[copyIndex('subnets')].IPRange]",
+                "networkSecurityGroup": {
+                  "id": "[concat(resourceGroup().id,'/providers/Microsoft.Network/networkSecurityGroups/', parameters('pVNET').Subnet[copyIndex('subnets')].NSG)]"
+                },
+                "routeTable": {
+                  "id": "[resourceId(parameters('pVNET').UDRResourceGroup,'Microsoft.Network/routeTables',parameters('pVNET').Subnet[copyIndex('subnets')].UDR)]"
+                },
+                "serviceEndpoints": [
+                  {
+                    "service": "Microsoft.AzureActiveDirectory",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.AzureCosmosDB",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.ContainerRegistry",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.EventHub",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.KeyVault",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.ServiceBus",
+                    "locations": [ "*" ]
+                  },
+                  {
+                    "service": "Microsoft.Sql",
+                    "locations": [ "australiaeast" ]
+                  },
+                  {
+                    "service": "Microsoft.Storage",
+                    "locations": [ "australiaeast", "australiasoutheast" ]
+                  },
+                  {
+                    "service": "Microsoft.Web",
+                    "locations": [ "*" ]
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "dhcpOptions": {
+          "dnsServers": [
+            "[parameters('pVNET').DNS1]",
+            "[parameters('pVNET').DNS2]"
+          ]
+        }
+      },
+      "resources": [
+        {
+          "name": "[parameters('pPrivateDMZ').PeeringName]",
+          "type": "virtualNetworkPeerings",
+          "apiVersion": "2018-08-01",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[concat('Microsoft.Network/virtualNetworks/', parameters('pVNET').Name)]"
+          ],
+          "properties": {
+            "allowVirtualNetworkAccess": true,
+            "allowForwardedTraffic": true,
+            "allowGatewayTransit": false,
+            "useRemoteGateways": false,
+            "remoteVirtualNetwork": {
+              "id": "[resourceId(parameters('pPrivateDMZ').SubscriptionID, parameters('pPrivateDMZ').ResourceGroup, 'Microsoft.Network/virtualNetworks', parameters('pPrivateDMZ').VNET)]"
+            }
+          }
+        },
+        {
+          "name": "[parameters('pPublicDMZ').PeeringName]",
+          "type": "virtualNetworkPeerings",
+          "apiVersion": "2018-08-01",
+          "location": "[resourceGroup().location]",
+          "dependsOn": [
+            "[concat('Microsoft.Network/virtualNetworks/', parameters('pVNET').Name)]"
+          ],
+          "properties": {
+            "allowVirtualNetworkAccess": true,
+            "allowForwardedTraffic": true,
+            "allowGatewayTransit": false,
+            "remoteVirtualNetwork": {
+              "id": "[resourceId(parameters('pPublicDMZ').SubscriptionID, parameters('pPublicDMZ').ResourceGroup, 'Microsoft.Network/virtualNetworks', parameters('pPublicDMZ').VNET)]"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "outputs": {}
+}
